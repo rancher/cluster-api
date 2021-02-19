@@ -163,6 +163,16 @@ func GetControlPlaneMachines(machines []*clusterv1.Machine) (res []*clusterv1.Ma
 	return
 }
 
+// GetControlPlaneMachines returns a slice containing control plane machines.
+func GetAccessibleControlPlaneMachines(machines []*clusterv1.Machine) (res []*clusterv1.Machine) {
+	for _, machine := range machines {
+		if IsControlPlaneMachine(machine) && IsControlPlaneMachineAccessible(machine) {
+			res = append(res, machine)
+		}
+	}
+	return
+}
+
 // GetControlPlaneMachinesFromList returns a slice containing control plane machines.
 func GetControlPlaneMachinesFromList(machineList *clusterv1.MachineList) (res []*clusterv1.Machine) {
 	for i := 0; i < len(machineList.Items); i++ {
@@ -208,6 +218,11 @@ func GetMachineIfExists(ctx context.Context, c client.Client, namespace, name st
 func IsControlPlaneMachine(machine *clusterv1.Machine) bool {
 	_, ok := machine.ObjectMeta.Labels[clusterv1.MachineControlPlaneLabelName]
 	return ok
+}
+
+func IsControlPlaneMachineAccessible(machine *clusterv1.Machine) bool {
+	return clusterv1.MachinePhase(machine.Status.Phase) == clusterv1.MachinePhaseProvisioned ||
+		clusterv1.MachinePhase(machine.Status.Phase) == clusterv1.MachinePhaseRunning
 }
 
 // IsNodeReady returns true if a node is ready.

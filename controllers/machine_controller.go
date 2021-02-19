@@ -251,13 +251,6 @@ func patchMachine(ctx context.Context, patchHelper *patch.Helper, machine *clust
 func (r *MachineReconciler) reconcile(ctx context.Context, cluster *clusterv1.Cluster, m *clusterv1.Machine) (ctrl.Result, error) {
 	log := ctrl.LoggerFrom(ctx)
 
-	if cluster.Status.ControlPlaneInitialized {
-		if err := r.watchClusterNodes(ctx, cluster); err != nil {
-			log.Error(err, "error watching nodes on target cluster")
-			return ctrl.Result{}, err
-		}
-	}
-
 	// If the Machine belongs to a cluster, add an owner reference.
 	if r.shouldAdopt(m) {
 		m.OwnerReferences = util.EnsureOwnerRef(m.OwnerReferences, metav1.OwnerReference{
@@ -288,7 +281,18 @@ func (r *MachineReconciler) reconcile(ctx context.Context, cluster *clusterv1.Cl
 		}
 		res = util.LowestNonZeroResult(res, phaseResult)
 	}
-	return res, kerrors.NewAggregate(errs)
+	if len(errs) > 0 {
+		return res, kerrors.NewAggregate(errs)
+	}
+
+	if cluster.Status.ControlPlaneInitialized {
+		if err := r.watchClusterNodes(ctx, cluster); err != nil {
+			log.Error(err, "error watching nodes on target cluster")
+			return ctrl.Result{}, err
+		}
+	}
+
+	return res, nil
 }
 
 func (r *MachineReconciler) reconcileDelete(ctx context.Context, cluster *clusterv1.Cluster, m *clusterv1.Machine) (ctrl.Result, error) {
@@ -480,7 +484,7 @@ func (r *MachineReconciler) isDeleteNodeAllowed(ctx context.Context, cluster *cl
 	// Whether or not it is okay to delete the NodeRef depends on the
 	// number of remaining control plane members and whether or not this
 	// machine is one of them.
-	switch numControlPlaneMachines := len(util.GetControlPlaneMachines(machines)); {
+	switch numControlPlaneMachines := len(util.GetAccessibleControlPlaneMachines(machines)); {
 	case numControlPlaneMachines == 0:
 		// Do not delete the NodeRef if there are no remaining members of
 		// the control plane.
